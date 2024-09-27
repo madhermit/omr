@@ -1,19 +1,106 @@
 #!/usr/bin/env bash
 
+# Set strict mode
+set -euo pipefail
+
+# Function to print usage information
+usage() {
+  cat <<EOF
+Usage: omr [options] [process]
+
+Options:
+  -h, --help     Show this help message and exit
+  -q, --quiet    Suppress non-error output
+
+Process:
+  rails   Restart Rails and worker processes
+  app     Restart the app process
+  If not specified, the process will be auto-detected based on the repository structure.
+
+Environment variables:
+  FIRST_ROOT_DIR  The root directory for the project (required)
+  FIRST_API_DIR   The API directory name (default: api)
+  FIRST_NUXT_DIR  The Nuxt directory name (default: app)
+
+Examples:
+  omr -h        # Show help
+  omr -q rails  # Restart Rails with suppressed output
+  omr app       # Restart app
+  omr           # Auto-detect and restart
+EOF
+}
+
+# Function to set up color output
+setup_colors() {
+  if [[ -t 1 ]]; then
+    GREEN=$(tput setaf 2)
+    BLUE=$(tput setaf 4)
+    MAGENTA=$(tput setaf 5)
+    BOLD=$(tput bold)
+    RESET=$(tput sgr0)
+  else
+    GREEN="" BLUE="" MAGENTA="" BOLD="" RESET=""
+  fi
+}
+
+parse_arguments() {
+  local -n _quiet=$1
+  local -n _process=$2
+
+  while [[ $# -gt 2 ]]; do
+    case $3 in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -q | --quiet)
+      _quiet=true
+      shift
+      ;;
+    *)
+      if [[ -z $_process ]]; then
+        _process=$3
+      else
+        error "Unknown argument: $3"
+        usage
+        exit 1
+      fi
+      shift
+      ;;
+    esac
+  done
+}
+
+# Function to print/control output
+output() {
+  local quiet=$1
+  shift
+  if [ "$quiet" = false ]; then
+    echo "$@"
+  fi
+}
+
+# Function to print error messages
+error() {
+  echo "ERROR: $*" >&2
+}
+
 # Restart Overmind process based on the directory where it's run
 omr() {
+  setup_colors
+
   local git_branch_path=$(git rev-parse --show-toplevel 2>/dev/null)
   local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   # Check if we're in a git repository
   if [[ -z "$git_branch_path" || -z "$branch" ]]; then
-    echo "Error: Not in a git repository" >&2
+    error "Not in a git repository"
     return 1
   fi
 
   # Check if FIRST_ROOT_DIR is set and valid
   if [[ -z "$FIRST_ROOT_DIR" || ! -d "$FIRST_ROOT_DIR" ]]; then
-    echo "Error: \$FIRST_ROOT_DIR ($FIRST_ROOT_DIR) is not a valid directory" >&2
+    error "\$FIRST_ROOT_DIR ($FIRST_ROOT_DIR) is not a valid directory"
     return 1
   fi
 
@@ -30,21 +117,14 @@ omr() {
   # Use detected process or fall back to user input
   local process=${1:-$detected_process}
   [[ -z "$process" ]] && {
-    echo "Error: Unable to detect process. Please specify: rails or app" >&2
+    error "Unable to detect process. Please specify: rails or app"
     return 1
   }
 
-  # Set up colors
-  local GREEN=$(tput setaf 2)
-  local BLUE=$(tput setaf 4)
-  local MAGENTA=$(tput setaf 5)
-  local BOLD=$(tput bold)
-  local RESET=$(tput sgr0)
-
   # Print info
-  echo "Issuing a ${MAGENTA}${BOLD}overmind restart $process${RESET} for:"
-  echo -e "  ${BOLD}Branch:${RESET} ${GREEN}$branch${RESET}"
-  echo -e "  ${BOLD}Path:${RESET}   ${BLUE}$git_branch_path${RESET}"
+  output "$quiet" "Issuing a ${MAGENTA}${BOLD}overmind restart $process${RESET} for:"
+  output "$quiet" -e "  ${BOLD}Branch:${RESET} ${GREEN}$branch${RESET}"
+  output "$quiet" -e "  ${BOLD}Path:${RESET}   ${BLUE}$git_branch_path${RESET}"
 
   # Perform the restart
   case "$process" in
@@ -55,10 +135,20 @@ omr() {
     (cd "$FIRST_ROOT_DIR" && ln -sfn "$git_branch_path" "$FIRST_NUXT_DIR" && overmind restart app)
     ;;
   *)
-    echo "Error: Unhandled process argument: $process" >&2
+    error "Unhandled process argument: $process"
+    usage
     return 1
     ;;
   esac
 }
 
-omr "$@"
+# Main execution
+main() {
+  local quiet=false
+  local process=""
+
+  parse_arguments verbose process "$@"
+  restart "$quiet" "$process"
+}
+
+main "$@"
