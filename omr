@@ -13,12 +13,15 @@ usage() {
 Usage: omr [options] [process]
 
 Options:
-  -h, --help     Show this help message and exit
-  -q, --quiet    Suppress non-error output
+  -h, --help               Show this help message and exit
+  -q, --quiet              Suppress non-error output
+  -b, --branch             Manually specify branch
+  -s, --status             Print out currently used branches for each service
 
 Process:
   rails   Restart Rails and worker processes
   app     Restart the app process
+  all     Restart all processes
   If not specified, the process will be auto-detected based on the repository structure.
 
 Environment variables:
@@ -29,8 +32,10 @@ Environment variables:
 Examples:
   omr -h        # Show help
   omr           # Auto-detect and restart
-  omr app       # Restart app
+  omr app       # Restart the app process
+  omr all       # Restart all processes
   omr -q rails  # Restart Rails with suppressed output
+  omr -b main   # Restart auto-detected process with the main branch
 EOF
 }
 
@@ -71,6 +76,15 @@ parse_arguments() {
       quiet=true
       shift
       ;;
+    -b | --branch)
+      SPECIFIED_BRANCH="$2"
+      shift
+      shift
+      ;;
+    -s | --status)
+      status
+      exit 0
+      ;;
     *)
       if [[ -z $process ]]; then
         process=$1
@@ -87,8 +101,22 @@ parse_arguments() {
 
 # Main function to restart Overmind process
 restart() {
-  local git_branch_path=$(git rev-parse --show-toplevel 2>/dev/null)
-  local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  local git_branch_path
+  local branch
+
+  # Use specified branch or detect from current directory
+  if [[ -n "${SPECIFIED_BRANCH:-}" ]]; then
+    branch="$SPECIFIED_BRANCH"
+    # Find the worktree for the specified branch
+    git_branch_path=$(git worktree list | grep "\[$SPECIFIED_BRANCH\]" | awk '{print $1}')
+    if [[ -z "$git_branch_path" ]]; then
+      error "No worktree found for branch: $SPECIFIED_BRANCH"
+      return 1
+    fi
+  else
+    git_branch_path=$(git rev-parse --show-toplevel 2>/dev/null)
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  fi
 
   # Check if we're in a git repository
   if [[ -z "$git_branch_path" || -z "$branch" ]]; then
@@ -128,12 +156,57 @@ restart() {
   app)
     (cd "$FIRST_ROOT_DIR" && ln -sfn "$git_branch_path" "$FIRST_NUXT_DIR" && overmind restart app)
     ;;
+  all)
+    (
+      cd "$FIRST_ROOT_DIR" &&
+        ln -sfn "$git_branch_path" "$FIRST_API_DIR" &&
+        ln -sfn "$git_branch_path" "$FIRST_NUXT_DIR" &&
+        overmind restart app rails worker
+    )
+    ;;
   *)
     error "Unhandled process argument: $process"
     usage
     return 1
     ;;
   esac
+}
+
+status() {
+  setup_colors
+
+  # Check if FIRST_ROOT_DIR is set
+  if [[ -z "${FIRST_ROOT_DIR:-}" || ! -d "$FIRST_ROOT_DIR" ]]; then
+    error "\$FIRST_ROOT_DIR is not set or is not a directory"
+    return 1
+  fi
+
+  local api_dir="${FIRST_ROOT_DIR}/${FIRST_API_DIR:-api}"
+  local nuxt_dir="${FIRST_ROOT_DIR}/${FIRST_NUXT_DIR:-app}"
+
+  # Rails/API status
+  if [[ -L "$api_dir" ]]; then
+    local api_path=$(readlink -f "$api_dir")
+    local api_branch=$(cd "$api_path" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    output "${MAGENTA}${BOLD}rails${RESET} status:"
+    output -e "  ${BOLD}Branch:${RESET} ${GREEN}${api_branch}${RESET}"
+    output -e "  ${BOLD}Path:${RESET}   ${BLUE}${api_path}${RESET}"
+  else
+    output "${MAGENTA}${BOLD}rails${RESET} status: ${BOLD}not linked${RESET}"
+  fi
+
+  output ""
+
+  # App/Nuxt status
+  if [[ -L "$nuxt_dir" ]]; then
+    local nuxt_path=$(readlink -f "$nuxt_dir")
+    local nuxt_branch=$(cd "$nuxt_path" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    output "${MAGENTA}${BOLD}app${RESET} status:"
+    output -e "  ${BOLD}Branch:${RESET} ${GREEN}${nuxt_branch}${RESET}"
+    output -e "  ${BOLD}Path:${RESET}   ${BLUE}${nuxt_path}${RESET}"
+  else
+    output "${MAGENTA}${BOLD}app${RESET} status: ${BOLD}not linked${RESET}"
+  fi
 }
 
 main() {
