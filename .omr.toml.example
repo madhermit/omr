@@ -1,0 +1,32 @@
+# OMR Configuration File
+#
+# Copy this file to one of these locations (in order of precedence):
+#   1. .omr.toml in current directory
+#   2. .omr.toml in git repository root
+#   3. ~/.omr.toml
+#   4. ~/.config/omr/config.toml
+#
+# Or specify a custom path with: omr -c /path/to/config.toml
+
+# Root directory where symlinks are managed
+# Can be overridden with OMR_ROOT environment variable
+root = "/path/to/active"
+
+# Service definitions
+# Each service maps a symlink name to overmind processes
+
+[services.api]
+dir = "api"                         # Symlink name in root directory
+procs = ["rails", "worker"]         # Overmind process names to restart
+detect = "config/application.rb"    # File to detect this service type (optional)
+
+[services.frontend]
+dir = "app"
+procs = ["app"]
+detect = "nuxt.config.ts"
+
+# Add more services as needed:
+# [services.another]
+# dir = "another"
+# procs = ["proc1", "proc2"]
+# detect = "some/marker/file"

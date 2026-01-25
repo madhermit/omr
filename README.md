@@ -1,123 +1,125 @@
-# Overmind Manager/Restarter
+# OMR - Overmind Restart
 
-`omr` is a bash script that simplifies the process of restarting [Overmind](https://github.com/DarthSim/overmind) processes in a Rails or Nuxt.js project. It's specifically designed to support a Git worktree-style workflow, allowing easy management of multiple branches in separate directories. The script automatically detects the project type and restarts the appropriate processes, making it easier to manage your development environment across different branches.
-
-## Features
-
-- Supports Git worktree-style workflow for managing multiple branches
-- Uses symlinks to make directory changes persistent
-- Automatically detects Rails or Nuxt.js projects
-- Restarts appropriate Overmind processes
-- Supports custom process specification
-- Quiet mode for suppressing non-error output
-- Color-coded output for better readability
-
-## Prerequisites
-
-- Unix-like operating system (Linux, macOS, etc.)
-- Git
-- [Overmind](https://github.com/DarthSim/overmind) installed and configured for your project
+OMR manages git worktree symlinks and restarts overmind processes for seamless branch switching in development.
 
 ## Installation
 
-1. Download the `omr` script:
+```bash
+# Build from source
+go build -o omr .
 
-   ```sh
-   curl -o omr https://raw.githubusercontent.com/yourusername/omr-script/main/omr
-   ```
-
-2. Make the script executable:
-
-   ```sh
-   chmod +x omr
-   ```
-
-3. Move the script to a directory in your PATH:
-
-   ```sh
-   sudo mv omr /usr/local/bin/
-   ```
-
-   Note: You may need to use `sudo` depending on the permissions of your `/usr/local/bin/` directory.
-
-## Usage
-
-```sh
-omr [options] [process]
+# Or install directly
+go install github.com/madhermit/omr@latest
 ```
 
-### Options
+## Quick Start
 
-- `-h, --help`: Show help message and exit
-- `-q, --quiet`: Suppress non-error output
-
-### Process
-
-- `rails`: Restart Rails and worker processes
-- `app`: Restart the app process (for Nuxt.js)
-
-If not specified, the process will be auto-detected based on the repository structure.
-
-### Examples
-
-1. Auto-detect and restart with verbose output (default):
-
-   ```sh
-   omr
+1. Generate a config file:
+   ```bash
+   omr init > .omr.toml
    ```
 
-2. Restart Rails with quiet output:
+2. Edit `.omr.toml` to match your project structure
 
-   ```sh
-   omr -q rails
+3. Use omr to switch branches and restart services:
+   ```bash
+   omr restart api          # Restart the api service
+   omr restart --all        # Restart all services
+   omr switch main          # Switch to main worktree
+   omr status               # Show current status
    ```
 
-3. Restart Nuxt.js app:
+## Commands
 
-   ```sh
-   omr app
-   ```
+```
+omr [global-flags] <command> [args]
 
-## Environment Variables
+Commands:
+  status              Show current service status
+  restart [services]  Restart services (auto-detects if none specified)
+  switch <worktree>   Switch worktree and restart all services
+  init                Generate example config file
+  version             Show version info
 
-- `FIRST_ROOT_DIR`: The root directory for the project (required)
-- `FIRST_API_DIR`: The API directory name (default: api)
-- `FIRST_NUXT_DIR`: The Nuxt directory name (default: app)
+Global Flags:
+  -h, --help           Help
+  -q, --quiet          Suppress output
+  -c, --config FILE    Config file path
 
-## Git Worktree Workflow and Symlink Usage
+Restart Flags:
+  -a, --all            Restart all services
+```
 
-This script is designed to work seamlessly with a Git worktree setup. It allows you to easily switch between different branches of your project, each in its own directory, and restart the appropriate Overmind processes for that branch. This is particularly useful for projects where you need to maintain multiple versions or feature branches simultaneously.
+## Configuration
 
-Key points about how `omr` works with Git worktrees:
+OMR looks for configuration in these locations (in order):
 
-1. The script uses symlinks to make directory changes persistent. This means that when you switch between branches, the appropriate directories are automatically linked to your current working branch.
+1. `--config` flag
+2. `.omr.toml` in current directory
+3. `.omr.toml` in git repository root
+4. `~/.omr.toml`
+5. `~/.config/omr/config.toml`
 
-2. The `FIRST_ROOT_DIR` environment variable should point to a directory that contains symlinks to your different branch directories. The script updates these symlinks as you switch branches.
+### Example Config
 
-3. When you run `omr`, it creates or updates symlinks in `FIRST_ROOT_DIR` to point to the current Git worktree. This ensures that Overmind always runs processes for your current branch.
+```toml
+# Root directory where symlinks are managed
+root = "/path/to/active"
 
-To use `omr` with Git worktrees:
+[services.api]
+dir = "api"                         # Symlink name in root
+procs = ["rails", "worker"]         # Overmind process names
+detect = "config/application.rb"    # Auto-detection file (optional)
 
-1. Set up your Git worktrees for different branches.
-2. Navigate to the worktree directory for the branch you want to work on.
-3. Run `omr` to update the symlinks and restart the Overmind processes for that specific branch.
+[services.frontend]
+dir = "app"
+procs = ["app"]
+detect = "nuxt.config.ts"
+```
 
-The script will automatically detect the current branch and project type, update the necessary symlinks, and restart the appropriate processes.
+### Environment Variables
 
-## Troubleshooting
+- `OMR_ROOT` - Override the root directory
+- `OMR_CONFIG` - Set config file path
+- `FIRST_ROOT_DIR` - Legacy alias for `OMR_ROOT` (deprecated, shows warning)
 
-If you encounter any issues running the script, ensure that:
+## How It Works
 
-1. The script has execute permissions (`chmod +x omr`).
-2. The script is in a directory listed in your PATH.
-3. All required environment variables are set correctly.
-4. You're running the script from within a Git repository.
-5. Your user has permissions to create and modify symlinks in the `FIRST_ROOT_DIR`.
+1. **Symlink Management**: OMR creates/updates symlinks in your root directory pointing to git worktrees
+2. **Process Restart**: After updating symlinks, OMR restarts the configured overmind processes
+3. **Auto-detection**: When no service is specified, OMR detects the service type based on marker files
 
-## Contributing
+## Examples
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+```bash
+# Show current status of all services
+omr status
+
+# Restart api service (updates symlink, restarts rails and worker)
+omr restart api
+
+# Restart all configured services
+omr restart --all
+
+# Switch all services to the main branch worktree
+omr switch main
+
+# Auto-detect and restart (based on current directory)
+omr restart
+
+# Quiet mode (suppress output)
+omr -q restart api
+
+# Use custom config file
+omr -c ~/myconfig.toml status
+```
+
+## Requirements
+
+- Go 1.21+ (for building)
+- [Overmind](https://github.com/DarthSim/overmind) process manager
+- Git with worktree support
 
 ## License
 
-This script is open-source software licensed under the MIT license.
+MIT
