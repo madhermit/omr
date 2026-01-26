@@ -36,15 +36,9 @@ func Load() (*Config, error) {
 	v.SetConfigName(".omr")
 	v.SetConfigType("toml")
 
-	// Config search paths: walk up from cwd looking for .omr.toml
+	// Walk up from cwd looking for .omr.toml
 	for _, dir := range parentDirs() {
 		v.AddConfigPath(dir)
-	}
-
-	// Also check home and XDG config
-	if home, err := os.UserHomeDir(); err == nil {
-		v.AddConfigPath(home)
-		v.AddConfigPath(filepath.Join(home, ".config", "omr"))
 	}
 
 	if configFile != "" {
@@ -62,6 +56,11 @@ func Load() (*Config, error) {
 
 	handleLegacyEnvVars(v)
 
+	// Default root to config file's directory
+	if v.GetString("root") == "" && v.ConfigFileUsed() != "" {
+		v.Set("root", filepath.Dir(v.ConfigFileUsed()))
+	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
@@ -70,7 +69,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// parentDirs returns the current directory and all parent directories
+// parentDirs returns directories to search for config
 func parentDirs() []string {
 	var dirs []string
 	dir, err := os.Getwd()
@@ -80,6 +79,13 @@ func parentDirs() []string {
 
 	for {
 		dirs = append(dirs, dir)
+		// Stop at config file or project root (Procfile.dev)
+		if _, err := os.Stat(filepath.Join(dir, ".omr.toml")); err == nil {
+			break
+		}
+		if _, err := os.Stat(filepath.Join(dir, "Procfile.dev")); err == nil {
+			break
+		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break
