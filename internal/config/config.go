@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/fatih/color"
 	"github.com/spf13/viper"
 )
 
@@ -96,14 +95,6 @@ func parentDirs() []string {
 }
 
 func handleLegacyEnvVars(v *viper.Viper) {
-	if legacyRoot := os.Getenv("FIRST_ROOT_DIR"); legacyRoot != "" {
-		if os.Getenv("OMR_ROOT") == "" {
-			yellow := color.New(color.FgYellow).SprintFunc()
-			fmt.Fprintf(os.Stderr, "%s FIRST_ROOT_DIR is deprecated, use OMR_ROOT instead\n", yellow("Warning:"))
-			v.Set("root", legacyRoot)
-		}
-	}
-
 	if envConfig := os.Getenv("OMR_CONFIG"); envConfig != "" && configFile == "" {
 		configFile = envConfig
 		v.SetConfigFile(envConfig)
