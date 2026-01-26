@@ -9,7 +9,6 @@ import (
 	"github.com/madhermit/omr/internal/config"
 	"github.com/madhermit/omr/internal/git"
 	"github.com/madhermit/omr/internal/overmind"
-	"github.com/madhermit/omr/internal/state"
 	"github.com/madhermit/omr/internal/symlink"
 	"github.com/spf13/cobra"
 )
@@ -108,15 +107,6 @@ func doRestart(cfg *config.Config, services []string, worktreePath, branch strin
 
 	if count := overmind.CountInstances(); count > 1 {
 		warn("Multiple overmind instances detected (%d)", count)
-	}
-
-	st := &state.State{
-		Worktree: worktreePath,
-		Branch:   branch,
-		Service:  services[0],
-	}
-	if err := state.Write(cfg.Root, st); err != nil {
-		warn("Failed to write state file: %v", err)
 	}
 
 	return nil

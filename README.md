@@ -37,7 +37,7 @@ omr [global-flags] <command> [args]
 Commands:
   status              Show current service status
   restart [services]  Restart services (auto-detects if none specified)
-  switch <worktree>   Switch worktree and restart all services
+  switch [branch]     Switch worktree and restart services
   init                Generate example config file
   version             Show version info
 
@@ -48,6 +48,9 @@ Global Flags:
 
 Restart Flags:
   -a, --all            Restart all services
+
+Switch Flags:
+  -a, --all            Switch all services
 ```
 
 ## Configuration
@@ -102,7 +105,7 @@ omr restart api
 omr restart --all
 
 # Switch all services to the main branch worktree
-omr switch main
+omr switch --all main
 
 # Auto-detect and restart (based on current directory)
 omr restart

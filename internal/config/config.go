@@ -36,11 +36,12 @@ func Load() (*Config, error) {
 	v.SetConfigName(".omr")
 	v.SetConfigType("toml")
 
-	// Config search paths
-	v.AddConfigPath(".")
-	if gitRoot, err := findGitRoot(); err == nil {
-		v.AddConfigPath(gitRoot)
+	// Config search paths: walk up from cwd looking for .omr.toml
+	for _, dir := range parentDirs() {
+		v.AddConfigPath(dir)
 	}
+
+	// Also check home and XDG config
 	if home, err := os.UserHomeDir(); err == nil {
 		v.AddConfigPath(home)
 		v.AddConfigPath(filepath.Join(home, ".config", "omr"))
@@ -69,6 +70,25 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+// parentDirs returns the current directory and all parent directories
+func parentDirs() []string {
+	var dirs []string
+	dir, err := os.Getwd()
+	if err != nil {
+		return dirs
+	}
+
+	for {
+		dirs = append(dirs, dir)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return dirs
+}
+
 func handleLegacyEnvVars(v *viper.Viper) {
 	if legacyRoot := os.Getenv("FIRST_ROOT_DIR"); legacyRoot != "" {
 		if os.Getenv("OMR_ROOT") == "" {
@@ -81,24 +101,6 @@ func handleLegacyEnvVars(v *viper.Viper) {
 	if envConfig := os.Getenv("OMR_CONFIG"); envConfig != "" && configFile == "" {
 		configFile = envConfig
 		v.SetConfigFile(envConfig)
-	}
-}
-
-func findGitRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	for {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("not in a git repository")
-		}
-		dir = parent
 	}
 }
 

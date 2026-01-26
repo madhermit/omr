@@ -16,8 +16,7 @@ var statusCmd = &cobra.Command{
 	Long: `Show the status of all configured services including:
 - Current branch (from symlink target)
 - Symlink path and target
-- Whether overmind is running
-- Available git worktrees`,
+- Whether overmind is running`,
 	RunE: runStatus,
 }
 
@@ -73,22 +72,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		log("    Branch: %s\n", color.GreenString(branch))
 		log("    Path:   %s\n", color.BlueString(target))
 		log("    Procs:  %v\n", svc.Procs)
-	}
-
-	logln()
-	logln(color.MagentaString("Available worktrees:"))
-
-	worktrees, err := git.ListWorktrees()
-	if err != nil {
-		warn("Could not list worktrees: %v", err)
-	} else {
-		for _, wt := range worktrees {
-			if wt.Bare {
-				log("  %s %s\n", color.BlueString(wt.Path), color.YellowString("(bare)"))
-			} else {
-				log("  %s [%s]\n", color.BlueString(wt.Path), color.GreenString(wt.Branch))
-			}
-		}
 	}
 
 	return nil
