@@ -16,9 +16,14 @@ type Worktree struct {
 	Bare   bool
 }
 
-// GetWorktreePath returns the path for a given branch's worktree
+// GetWorktreePath returns the path for a given branch's worktree (from cwd)
 func GetWorktreePath(branch string) (string, error) {
-	worktrees, err := ListWorktrees()
+	return GetWorktreePathInDir("", branch)
+}
+
+// GetWorktreePathInDir returns the path for a given branch's worktree in a specific directory
+func GetWorktreePathInDir(dir, branch string) (string, error) {
+	worktrees, err := ListWorktreesInDir(dir)
 	if err != nil {
 		return "", err
 	}
@@ -41,9 +46,20 @@ func GetCurrentBranch(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ListWorktrees returns all git worktrees
+// ListWorktrees returns all git worktrees (from cwd)
 func ListWorktrees() ([]Worktree, error) {
-	out, err := exec.Command("git", "worktree", "list").Output()
+	return ListWorktreesInDir("")
+}
+
+// ListWorktreesInDir returns all git worktrees for the repo at the given directory
+func ListWorktreesInDir(dir string) ([]Worktree, error) {
+	var cmd *exec.Cmd
+	if dir == "" {
+		cmd = exec.Command("git", "worktree", "list")
+	} else {
+		cmd = exec.Command("git", "-C", dir, "worktree", "list")
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}

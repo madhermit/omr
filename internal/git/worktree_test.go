@@ -108,6 +108,90 @@ func TestGetCurrentBranch(t *testing.T) {
 	}
 }
 
+func TestListWorktreesInDir(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "git-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	exec.Command("git", "-C", tmpDir, "config", "user.email", "test@test.com").Run()
+	exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
+
+	testFile := filepath.Join(tmpDir, "test.txt")
+	os.WriteFile(testFile, []byte("test"), 0o644)
+	exec.Command("git", "-C", tmpDir, "add", ".").Run()
+	exec.Command("git", "-C", tmpDir, "commit", "-m", "initial").Run()
+
+	// Test ListWorktreesInDir from a different directory
+	worktrees, err := ListWorktreesInDir(tmpDir)
+	if err != nil {
+		t.Fatalf("ListWorktreesInDir failed: %v", err)
+	}
+
+	if len(worktrees) == 0 {
+		t.Error("expected at least one worktree")
+	}
+
+	// The main worktree should be listed
+	found := false
+	for _, wt := range worktrees {
+		if wt.Path == tmpDir {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find worktree at %s", tmpDir)
+	}
+}
+
+func TestGetWorktreePathInDir(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "git-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	exec.Command("git", "-C", tmpDir, "config", "user.email", "test@test.com").Run()
+	exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
+
+	testFile := filepath.Join(tmpDir, "test.txt")
+	os.WriteFile(testFile, []byte("test"), 0o644)
+	exec.Command("git", "-C", tmpDir, "add", ".").Run()
+	exec.Command("git", "-C", tmpDir, "commit", "-m", "initial").Run()
+
+	// Get the branch name (could be main or master)
+	branch, _ := GetCurrentBranch(tmpDir)
+
+	// Test GetWorktreePathInDir
+	path, err := GetWorktreePathInDir(tmpDir, branch)
+	if err != nil {
+		t.Fatalf("GetWorktreePathInDir failed: %v", err)
+	}
+
+	expectedPath, _ := filepath.EvalSymlinks(tmpDir)
+	gotPath, _ := filepath.EvalSymlinks(path)
+
+	if gotPath != expectedPath {
+		t.Errorf("expected %q, got %q", expectedPath, gotPath)
+	}
+
+	// Test with non-existent branch
+	_, err = GetWorktreePathInDir(tmpDir, "nonexistent-branch")
+	if err == nil {
+		t.Error("expected error for nonexistent branch")
+	}
+}
+
 func TestRepoRoot(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "git-test")
 	if err != nil {

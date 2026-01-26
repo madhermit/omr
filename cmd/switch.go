@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/madhermit/omr/internal/git"
+	"github.com/madhermit/omr/internal/overmind"
 	"github.com/madhermit/omr/internal/symlink"
 	"github.com/spf13/cobra"
 )
@@ -40,30 +41,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Determine worktree path and branch
-	var worktreePath, branch string
-	var err error
-
-	if len(args) == 0 {
-		worktreePath, err = git.RepoRoot()
-		if err != nil {
-			return fmt.Errorf("determining current worktree: %w", err)
-		}
-		branch, err = git.GetCurrentBranch(worktreePath)
-		if err != nil {
-			return fmt.Errorf("determining current branch: %w", err)
-		}
-	} else {
-		branch = args[0]
-		worktreePath, err = git.GetWorktreePath(branch)
-		if err != nil {
-			return fmt.Errorf("finding worktree for branch '%s': %w", branch, err)
-		}
-		if err := git.ValidateWorktreePath(worktreePath); err != nil {
-			return fmt.Errorf("invalid worktree: %w", err)
-		}
-	}
-
 	// Determine which services to switch
 	var services []string
 	if switchAll {
@@ -76,22 +53,75 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		services = []string{svcName}
 	}
 
-	if !needsSwitch(services, worktreePath) {
+	// Determine branch
+	var branch string
+	if len(args) == 0 {
+		// Use current worktree's branch
+		worktreePath, err := git.RepoRoot()
+		if err != nil {
+			return fmt.Errorf("determining current worktree: %w", err)
+		}
+		branch, err = git.GetCurrentBranch(worktreePath)
+		if err != nil {
+			return fmt.Errorf("determining current branch: %w", err)
+		}
+	} else {
+		branch = args[0]
+	}
+
+	// Switch each service to its worktree for the branch
+	return doSwitchServices(services, branch)
+}
+
+func doSwitchServices(services []string, branch string) error {
+	var allProcs []string
+	anyChanged := false
+
+	for _, svcName := range services {
+		svc := cfg.Services[svcName]
+		linkPath := filepath.Join(cfg.Root, svc.Dir)
+
+		// Find worktree for this service's repo
+		// The service dir is like "first-api/current", parent dir contains worktrees
+		svcRepoDir := filepath.Dir(linkPath)
+		worktreePath, err := git.GetWorktreePathInDir(svcRepoDir, branch)
+		if err != nil {
+			return fmt.Errorf("finding worktree for %s branch '%s': %w", svcName, branch, err)
+		}
+
+		// Check if already on this worktree
+		_, currentTarget, _ := symlink.Verify(linkPath)
+		if currentTarget == worktreePath {
+			log("  %s: already on %s\n", color.MagentaString(svcName), color.CyanString(branch))
+			continue
+		}
+
+		log("Switching %s:\n", color.MagentaString(svcName))
+		log("  Branch: %s\n", color.GreenString(branch))
+		log("  Path:   %s\n", color.BlueString(worktreePath))
+
+		if err := symlink.Create(cfg.Root, svc.Dir, worktreePath); err != nil {
+			return fmt.Errorf("creating symlink for %s: %w", svcName, err)
+		}
+
+		allProcs = append(allProcs, svc.Procs...)
+		anyChanged = true
+	}
+
+	if !anyChanged {
 		logln(color.GreenString("Already on"), color.CyanString(branch))
 		return nil
 	}
 
-	return doRestart(cfg, services, worktreePath, branch)
-}
-
-func needsSwitch(services []string, worktreePath string) bool {
-	for _, name := range services {
-		svc := cfg.Services[name]
-		linkPath := filepath.Join(cfg.Root, svc.Dir)
-		_, target, _ := symlink.Verify(linkPath)
-		if target != worktreePath {
-			return true
+	// Restart overmind processes
+	if !overmind.IsRunning() {
+		warn("Overmind is not running. Start it with: overmind start")
+	} else if len(allProcs) > 0 {
+		log("\nRestarting overmind processes: %v\n", allProcs)
+		if err := overmind.Restart(allProcs...); err != nil {
+			return fmt.Errorf("restarting overmind: %w", err)
 		}
 	}
-	return false
+
+	return nil
 }

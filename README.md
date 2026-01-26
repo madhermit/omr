@@ -37,8 +37,8 @@ omr [global-flags] <command> [args]
 
 Commands:
   status              Show current service status
-  restart [services]  Restart services (auto-detects if none specified)
-  switch [branch]     Switch worktree and restart services
+  restart [services]  Restart overmind processes (no symlink changes)
+  switch [branch]     Switch symlinks to branch worktree and restart
   init                Generate example config file
   version             Show version info
 
@@ -105,10 +105,10 @@ omr switch
 # Switch all services to the main branch worktree
 omr switch --all main
 
-# Restart api service (updates symlink, restarts rails and worker)
+# Restart api processes (no symlink change)
 omr restart api
 
-# Restart all configured services
+# Restart all processes
 omr restart --all
 ```
 
