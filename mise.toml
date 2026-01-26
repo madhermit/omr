@@ -1,0 +1,48 @@
+[tools]
+go = "1.25"
+
+[tasks.build]
+description = "Build omr binary"
+run = "go build -o omr-bin ."
+
+[tasks.test]
+description = "Run tests"
+run = "go test ./..."
+
+[tasks.fmt]
+description = "Format code"
+run = "go fmt ./..."
+
+[tasks.lint]
+description = "Run linter"
+run = "go vet ./..."
+
+[tasks.check]
+description = "Run all checks (fmt, lint, test)"
+depends = ["fmt", "lint", "test"]
+
+[tasks.install]
+description = "Install omr to ~/.local/bin"
+run = "go build -o ~/.local/bin/omr ."
+
+[tasks.release]
+description = "Build release binaries for all platforms"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+VERSION=${1:-dev}
+mkdir -p dist
+
+echo "Building version: $VERSION"
+
+# Linux
+GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-linux-amd64 .
+GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-linux-arm64 .
+
+# macOS
+GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-darwin-arm64 .
+
+echo "Built binaries in dist/"
+ls -la dist/
+"""

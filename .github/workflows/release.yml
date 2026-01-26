@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          VERSION=${GITHUB_REF#refs/tags/}
+
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-linux-arm64 .
+
+          # macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-darwin-arm64 .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

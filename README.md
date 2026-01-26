@@ -5,10 +5,11 @@ OMR manages git worktree symlinks and restarts overmind processes for seamless b
 ## Installation
 
 ```bash
-# Build from source
-go build -o omr .
+curl -fsSL https://raw.githubusercontent.com/madhermit/omr/main/install.sh | bash
+```
 
-# Or install directly
+Or with Go:
+```bash
 go install github.com/madhermit/omr@latest
 ```
 
@@ -113,9 +114,18 @@ omr restart --all
 
 ## Requirements
 
-- Go 1.21+ (for building)
 - [Overmind](https://github.com/DarthSim/overmind) process manager
 - Git with worktree support
+
+## Development
+
+```bash
+mise install       # install Go 1.25
+mise run test      # run tests
+mise run build     # build binary
+mise run check     # fmt + lint + test
+mise run release   # build all platform binaries
+```
 
 ## License
 
