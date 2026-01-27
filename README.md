@@ -1,25 +1,30 @@
 # OMR - Overmind Worktree Manager
 
-OMR manages git worktree symlinks and restarts overmind processes for seamless branch switching in development.
+OMR manages git worktree symlinks and restarts [Overmind](https://github.com/DarthSim/overmind) processes for seamless branch switching in development.
 
 ## Installation
 
 **With mise** (recommended):
+
 ```toml
 # Add to your project's mise.toml
 [tools]
+"ubi:DarthSim/overmind" = "latest"
 "ubi:madhermit/omr" = "latest"
 ```
+
 ```bash
 mise install
 ```
 
 **Or download directly**:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/madhermit/omr/main/install.sh | bash
 ```
 
 **Or with Go**:
+
 ```bash
 go install github.com/madhermit/omr@latest
 ```
@@ -27,6 +32,7 @@ go install github.com/madhermit/omr@latest
 ## Quick Start
 
 1. Generate a config file:
+
    ```bash
    omr init > .omr.toml
    ```
@@ -85,12 +91,12 @@ detect = "nuxt.config.ts"
 
 ### Config Options
 
-| Option | Description |
-|--------|-------------|
-| `dir` | Symlink path, relative to the config file's directory |
-| `procs` | Overmind process names to restart (from your Procfile) |
-| `detect` | File to look for when auto-detecting service (optional) |
-| `root` | Override the root directory (defaults to config file's directory) |
+| Option   | Description                                                       |
+| -------- | ----------------------------------------------------------------- |
+| `dir`    | Symlink path, relative to the config file's directory             |
+| `procs`  | Overmind process names to restart (from your Procfile)            |
+| `detect` | File to look for when auto-detecting service (optional)           |
+| `root`   | Override the root directory (defaults to config file's directory) |
 
 ### Environment Variables
 
