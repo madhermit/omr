@@ -17,6 +17,8 @@ OMR manages git worktree symlinks and restarts [Overmind](https://github.com/Dar
 mise install
 ```
 
+To upgrade: `mise upgrade ubi:madhermit/omr` (run `mise cache clear` first if it doesn't see the new version).
+
 **Or download directly**:
 
 ```bash
@@ -69,6 +71,14 @@ Restart Flags:
 
 Switch Flags:
   -a, --all            Switch all services
+```
+
+## Shell Completions
+
+```bash
+omr completion fish > ~/.config/fish/completions/omr.fish
+omr completion bash >> ~/.bashrc
+omr completion zsh >> ~/.zshrc
 ```
 
 ## Configuration
