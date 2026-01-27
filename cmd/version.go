@@ -26,6 +26,7 @@ var versionCmd = &cobra.Command{
 		if Date != "unknown" {
 			fmt.Printf("  built:  %s\n", Date)
 		}
+		CheckForUpdate()
 	},
 }
 

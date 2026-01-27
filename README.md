@@ -4,11 +4,22 @@ OMR manages git worktree symlinks and restarts overmind processes for seamless b
 
 ## Installation
 
+**With mise** (recommended):
+```toml
+# Add to your project's mise.toml
+[tools]
+"ubi:madhermit/omr" = "latest"
+```
+```bash
+mise install
+```
+
+**Or download directly**:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/madhermit/omr/main/install.sh | bash
 ```
 
-Or with Go:
+**Or with Go**:
 ```bash
 go install github.com/madhermit/omr@latest
 ```

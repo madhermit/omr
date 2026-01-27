@@ -25,14 +25,15 @@ jobs:
         run: |
           mkdir -p dist
           VERSION=${GITHUB_REF#refs/tags/}
+          LDFLAGS="-s -w -X github.com/madhermit/omr/cmd.Version=${VERSION}"
 
           # Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-linux-arm64 .
+          GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/omr-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/omr-linux-arm64 .
 
           # macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/omr-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/omr-darwin-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/omr-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/omr-darwin-arm64 .
 
       - name: Create release
         uses: softprops/action-gh-release@v2

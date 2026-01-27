@@ -17,8 +17,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "omr",
-	Short: "Overmind Restart - manage worktrees and restart services",
-	Long: `OMR (Overmind Restart) manages git worktree symlinks and restarts
+	Short: "Overmind Worktree Manager - manage worktrees and restart services",
+	Long: `OMR (Overmind Worktree Manager) manages git worktree symlinks and restarts
 overmind processes for seamless branch switching in development.
 
 Configure services in .omr.toml and use omr to switch between
