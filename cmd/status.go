@@ -30,7 +30,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check overmind status
-	if overmind.IsRunning() {
+	if overmind.IsRunning(cfg.Root) {
 		logln(color.GreenString("Overmind:"), "running")
 	} else {
 		logln(color.YellowString("Overmind:"), "not running")

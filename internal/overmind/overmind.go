@@ -7,9 +7,11 @@ import (
 	"strings"
 )
 
-// IsRunning checks if overmind is currently running
-func IsRunning() bool {
-	return exec.Command("overmind", "status").Run() == nil
+// IsRunning checks if overmind is currently running in the given directory
+func IsRunning(dir string) bool {
+	cmd := exec.Command("overmind", "status")
+	cmd.Dir = dir
+	return cmd.Run() == nil
 }
 
 // Restart restarts the specified overmind processes

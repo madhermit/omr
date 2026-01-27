@@ -59,7 +59,7 @@ func runRestart(cmd *cobra.Command, args []string) error {
 		allProcs = append(allProcs, svc.Procs...)
 	}
 
-	if !overmind.IsRunning() {
+	if !overmind.IsRunning(cfg.Root) {
 		return fmt.Errorf("overmind is not running; start it with: overmind start")
 	}
 

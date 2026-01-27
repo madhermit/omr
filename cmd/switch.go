@@ -114,7 +114,7 @@ func doSwitchServices(services []string, branch string) error {
 	}
 
 	// Restart overmind processes
-	if !overmind.IsRunning() {
+	if !overmind.IsRunning(cfg.Root) {
 		warn("Overmind is not running. Start it with: overmind start")
 	} else if len(allProcs) > 0 {
 		log("\nRestarting overmind processes: %v\n", allProcs)
