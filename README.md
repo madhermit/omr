@@ -1,4 +1,4 @@
-# OMR - Overmind Restart
+# OMR - Overmind Worktree Manager
 
 OMR manages git worktree symlinks and restarts overmind processes for seamless branch switching in development.
 
