@@ -3,7 +3,10 @@ go = "1.25"
 
 [tasks.build]
 description = "Build omr binary"
-run = "go build -o omr-bin ."
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+go build -ldflags "-X github.com/madhermit/omr/cmd.Version=${VERSION}" -o omr-bin .
+"""
 
 [tasks.test]
 description = "Run tests"
@@ -23,7 +26,10 @@ depends = ["fmt", "lint", "test"]
 
 [tasks.install]
 description = "Install omr to ~/.local/bin"
-run = "go build -o ~/.local/bin/omr ."
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+go build -ldflags "-X github.com/madhermit/omr/cmd.Version=${VERSION}" -o ~/.local/bin/omr .
+"""
 
 [tasks.release]
 description = "Build release binaries for all platforms"
