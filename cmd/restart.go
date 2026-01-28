@@ -68,7 +68,7 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	}
 
 	log("Restarting processes: %v\n", allProcs)
-	if err := overmind.Restart(allProcs...); err != nil {
+	if err := overmind.Restart(cfg.Root, allProcs...); err != nil {
 		return fmt.Errorf("restarting overmind: %w", err)
 	}
 

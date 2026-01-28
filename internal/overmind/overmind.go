@@ -14,14 +14,20 @@ func IsRunning(dir string) bool {
 	return cmd.Run() == nil
 }
 
-// Restart restarts the specified overmind processes
-func Restart(procs ...string) error {
+// Restart restarts the specified overmind processes in the given directory
+func Restart(dir string, procs ...string) error {
 	if len(procs) == 0 {
 		return fmt.Errorf("no processes specified")
 	}
 
 	args := append([]string{"restart"}, procs...)
-	if err := exec.Command("overmind", args...).Run(); err != nil {
+	cmd := exec.Command("overmind", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("restarting processes: %s", strings.TrimSpace(string(output)))
+		}
 		return fmt.Errorf("restarting processes: %w", err)
 	}
 	return nil
