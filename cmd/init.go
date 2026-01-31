@@ -7,19 +7,15 @@ import (
 )
 
 const exampleConfig = `# OMR Configuration File
-# Save this as .omr.toml in your project root or home directory
+# Save this as .omr.toml in your project root
 
-# Root directory where symlinks are managed
-root = "/path/to/active"
-
-# Service definitions
 [services.api]
-dir = "api"                         # Symlink name in root directory
+dir = "api/current"                 # Symlink path (relative to this file)
 procs = ["rails", "worker"]         # Overmind process names to restart
 detect = "config/application.rb"    # File to detect this service type (optional)
 
 [services.frontend]
-dir = "app"
+dir = "frontend/current"
 procs = ["app"]
 detect = "nuxt.config.ts"
 `

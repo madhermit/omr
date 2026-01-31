@@ -3,7 +3,6 @@ package overmind
 import (
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -33,12 +32,3 @@ func Restart(dir string, procs ...string) error {
 	return nil
 }
 
-// CountInstances counts the number of running overmind instances
-func CountInstances() int {
-	out, err := exec.Command("pgrep", "-c", "overmind").Output()
-	if err != nil {
-		return 0
-	}
-	count, _ := strconv.Atoi(strings.TrimSpace(string(out)))
-	return count
-}

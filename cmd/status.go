@@ -36,10 +36,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		logln(color.YellowString("Overmind:"), "not running")
 	}
 
-	if count := overmind.CountInstances(); count > 1 {
-		warn("Multiple overmind instances detected (%d)", count)
-	}
-
 	logln()
 	logln(color.MagentaString("Services:"))
 
