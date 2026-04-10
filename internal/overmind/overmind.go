@@ -31,4 +31,3 @@ func Restart(dir string, procs ...string) error {
 	}
 	return nil
 }
-
