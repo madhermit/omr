@@ -22,6 +22,19 @@ type Config struct {
 	Services map[string]Service `mapstructure:"services"`
 }
 
+// HasSingleDir returns true if all services share the same dir
+func (c *Config) HasSingleDir() bool {
+	var dir string
+	for _, svc := range c.Services {
+		if dir == "" {
+			dir = svc.Dir
+		} else if svc.Dir != dir {
+			return false
+		}
+	}
+	return true
+}
+
 // ProcsForDir returns all process names from services that share the given dir
 func (c *Config) ProcsForDir(dir string) []string {
 	var procs []string
@@ -79,22 +92,19 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// parentDirs returns directories to search for config
+// parentDirs returns the outermost directory containing .omr.toml.
+// Walks up from cwd to find all .omr.toml files, returns the outermost one
+// so the project root is preferred over nested worktree copies.
 func parentDirs() []string {
-	var dirs []string
+	var outermost string
 	dir, err := os.Getwd()
 	if err != nil {
-		return dirs
+		return nil
 	}
 
 	for {
-		dirs = append(dirs, dir)
-		// Stop at config file or project root (Procfile.dev)
 		if _, err := os.Stat(filepath.Join(dir, ".omr.toml")); err == nil {
-			break
-		}
-		if _, err := os.Stat(filepath.Join(dir, "Procfile.dev")); err == nil {
-			break
+			outermost = dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -102,7 +112,11 @@ func parentDirs() []string {
 		}
 		dir = parent
 	}
-	return dirs
+
+	if outermost != "" {
+		return []string{outermost}
+	}
+	return nil
 }
 
 func handleLegacyEnvVars(v *viper.Viper) {

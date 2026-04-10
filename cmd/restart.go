@@ -33,11 +33,8 @@ func init() {
 }
 
 func runRestart(cmd *cobra.Command, args []string) error {
-	// Determine which services to restart
 	var services []string
-	if restartAll {
-		services = cfg.ServiceNames()
-	} else if len(args) > 0 {
+	if len(args) > 0 {
 		services = args
 		for _, svc := range services {
 			if err := cfg.ValidateService(svc); err != nil {
@@ -45,11 +42,11 @@ func runRestart(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		svc, err := detectService(cfg)
+		var err error
+		services, err = resolveServices(cfg, restartAll)
 		if err != nil {
 			return err
 		}
-		services = []string{svc}
 	}
 
 	// Collect all procs to restart
@@ -73,6 +70,22 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resolveServices determines which services to operate on.
+// If all is true, returns all services. Otherwise tries auto-detection,
+// falling back to all services when they share a single dir.
+func resolveServices(cfg *config.Config, all bool) ([]string, error) {
+	if all {
+		return cfg.ServiceNames(), nil
+	}
+	svc, err := detectService(cfg)
+	if err != nil && cfg.HasSingleDir() {
+		return cfg.ServiceNames(), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return []string{svc}, nil
 }
 
 func detectService(cfg *config.Config) (string, error) {

@@ -83,7 +83,7 @@ omr completion zsh >> ~/.zshrc
 
 ## Configuration
 
-OMR looks for `.omr.toml` in the current directory and parent directories.
+OMR looks for `.omr.toml` by walking up from the current directory. When multiple `.omr.toml` files exist (e.g., inside a worktree and at the project root), the outermost one is preferred.
 
 ### Example: Multi-Repo (per-service symlinks)
 
@@ -101,7 +101,7 @@ detect = "nuxt.config.ts"
 
 ### Example: Monorepo (shared root symlink)
 
-When multiple services share the same `dir`, OMR manages one symlink and restarts all services on switch:
+When multiple services share the same `dir`, OMR manages one symlink and restarts all services on switch. Auto-detection falls back to all services, so `--all` is not required:
 
 ```toml
 [services.api]

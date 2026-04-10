@@ -41,16 +41,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Determine which services to switch
-	var services []string
-	if switchAll {
-		services = cfg.ServiceNames()
-	} else {
-		svcName, err := detectService(cfg)
-		if err != nil {
-			return err
-		}
-		services = []string{svcName}
+	services, err := resolveServices(cfg, switchAll)
+	if err != nil {
+		return err
 	}
 
 	// Determine branch

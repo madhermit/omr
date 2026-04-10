@@ -18,6 +18,11 @@ func Create(root, name, target string) error {
 		}
 	}
 
+	// Use relative path for cleaner symlinks
+	if rel, err := filepath.Rel(filepath.Dir(linkPath), target); err == nil {
+		target = rel
+	}
+
 	if err := os.Symlink(target, linkPath); err != nil {
 		return fmt.Errorf("creating symlink: %w", err)
 	}

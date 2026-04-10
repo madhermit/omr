@@ -35,8 +35,8 @@ func TestCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read symlink: %v", err)
 	}
-	if target != targetDir {
-		t.Errorf("expected target %q, got %q", targetDir, target)
+	if target != "target" {
+		t.Errorf("expected relative target %q, got %q", "target", target)
 	}
 }
 
@@ -62,8 +62,8 @@ func TestCreateReplacesExisting(t *testing.T) {
 
 	linkPath := filepath.Join(tmpDir, "mylink")
 	target, _ := os.Readlink(linkPath)
-	if target != target2 {
-		t.Errorf("expected target %q, got %q", target2, target)
+	if target != "target2" {
+		t.Errorf("expected relative target %q, got %q", "target2", target)
 	}
 }
 
