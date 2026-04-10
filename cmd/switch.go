@@ -56,7 +56,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	// Determine branch
 	var branch string
 	if len(args) == 0 {
-		// Use current worktree's branch
 		worktreePath, err := git.RepoRoot()
 		if err != nil {
 			return fmt.Errorf("determining current worktree: %w", err)
@@ -69,42 +68,46 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		branch = args[0]
 	}
 
-	// Switch each service to its worktree for the branch
-	return doSwitchServices(services, branch)
-}
-
-func doSwitchServices(services []string, branch string) error {
+	// Deduplicate dirs — multiple services may share one symlink
+	switched := map[string]bool{}
 	var allProcs []string
 	anyChanged := false
 
 	for _, svcName := range services {
 		svc := cfg.Services[svcName]
-		linkPath := filepath.Join(cfg.Root, svc.Dir)
+		if switched[svc.Dir] {
+			continue
+		}
+		switched[svc.Dir] = true
 
-		// Find worktree for this service's repo
-		// The service dir is like "first-api/current", parent dir contains worktrees
-		svcRepoDir := filepath.Dir(linkPath)
-		worktreePath, err := git.GetWorktreePathInDir(svcRepoDir, branch)
+		linkPath := filepath.Join(cfg.Root, svc.Dir)
+		_, currentTarget, _ := symlink.Verify(linkPath)
+
+		// Use resolved symlink target for worktree discovery, fall back to parent dir
+		searchDir := filepath.Dir(linkPath)
+		if currentTarget != "" {
+			searchDir = currentTarget
+		}
+
+		worktreePath, err := git.GetWorktreePathInDir(searchDir, branch)
 		if err != nil {
 			return fmt.Errorf("finding worktree for %s branch '%s': %w", svcName, branch, err)
 		}
 
-		// Check if already on this worktree
-		_, currentTarget, _ := symlink.Verify(linkPath)
 		if currentTarget == worktreePath {
-			log("  %s: already on %s\n", color.MagentaString(svcName), color.CyanString(branch))
+			log("  %s: already on %s\n", color.MagentaString(svc.Dir), color.CyanString(branch))
 			continue
 		}
 
-		log("Switching %s:\n", color.MagentaString(svcName))
-		log("  Branch: %s\n", color.GreenString(branch))
-		log("  Path:   %s\n", color.BlueString(worktreePath))
+		log("Switching %s → %s\n", color.MagentaString(svc.Dir), color.CyanString(branch))
+		log("  Path: %s\n", color.BlueString(worktreePath))
 
 		if err := symlink.Create(cfg.Root, svc.Dir, worktreePath); err != nil {
-			return fmt.Errorf("creating symlink for %s: %w", svcName, err)
+			return fmt.Errorf("creating symlink for %s: %w", svc.Dir, err)
 		}
 
-		allProcs = append(allProcs, svc.Procs...)
+		// Restart all services sharing this dir, not just the detected one
+		allProcs = append(allProcs, cfg.ProcsForDir(svc.Dir)...)
 		anyChanged = true
 	}
 
@@ -113,15 +116,15 @@ func doSwitchServices(services []string, branch string) error {
 		return nil
 	}
 
-	// Restart overmind processes
 	if !overmind.IsRunning(cfg.Root) {
 		warn("Overmind is not running. Start it with: overmind start")
-	} else if len(allProcs) > 0 {
+		return nil
+	}
+	if len(allProcs) > 0 {
 		log("\nRestarting overmind processes: %v\n", allProcs)
 		if err := overmind.Restart(cfg.Root, allProcs...); err != nil {
 			return fmt.Errorf("restarting overmind: %w", err)
 		}
 	}
-
 	return nil
 }

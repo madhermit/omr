@@ -22,6 +22,17 @@ type Config struct {
 	Services map[string]Service `mapstructure:"services"`
 }
 
+// ProcsForDir returns all process names from services that share the given dir
+func (c *Config) ProcsForDir(dir string) []string {
+	var procs []string
+	for _, svc := range c.Services {
+		if svc.Dir == dir {
+			procs = append(procs, svc.Procs...)
+		}
+	}
+	return procs
+}
+
 var configFile string
 
 // SetConfigFile sets the config file path (from --config flag)
@@ -126,6 +137,11 @@ func (c *Config) ValidateRoot() error {
 	}
 	if _, err := os.Stat(c.Root); os.IsNotExist(err) {
 		return fmt.Errorf("root directory does not exist: %s", c.Root)
+	}
+	for name, svc := range c.Services {
+		if svc.Dir == "" {
+			return fmt.Errorf("service %q is missing required 'dir' field", name)
+		}
 	}
 	return nil
 }

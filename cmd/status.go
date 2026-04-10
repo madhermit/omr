@@ -39,35 +39,37 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	logln()
 	logln(color.MagentaString("Services:"))
 
+	shown := map[string]bool{}
 	for _, name := range cfg.ServiceNames() {
 		svc := cfg.Services[name]
 		linkPath := filepath.Join(cfg.Root, svc.Dir)
 
-		valid, target, err := symlink.Verify(linkPath)
-		if err != nil {
-			log("  %s: %s\n", color.MagentaString(name), color.RedString(err.Error()))
-			continue
+		// Show symlink status once per unique dir
+		if !shown[svc.Dir] {
+			shown[svc.Dir] = true
+
+			valid, target, err := symlink.Verify(linkPath)
+			if err != nil {
+				log("  %s: %s\n", color.MagentaString(name), color.RedString(err.Error()))
+				continue
+			}
+			if !symlink.Exists(linkPath) {
+				log("  %s: %s\n", color.MagentaString(name), color.YellowString("not a symlink: %s", linkPath))
+				continue
+			}
+			if !valid {
+				log("  %s: %s (target: %s)\n", color.MagentaString(name), color.RedString("broken symlink"), target)
+				continue
+			}
+
+			branch, err := git.GetCurrentBranch(target)
+			if err != nil {
+				branch = "unknown"
+			}
+			log("  %s: %s (%s)\n", color.MagentaString(svc.Dir), color.GreenString(branch), color.BlueString(target))
 		}
 
-		if !symlink.Exists(linkPath) {
-			log("  %s: %s\n", color.MagentaString(name), color.YellowString("not linked"))
-			continue
-		}
-
-		if !valid {
-			log("  %s: %s (target: %s)\n", color.MagentaString(name), color.RedString("broken symlink"), target)
-			continue
-		}
-
-		branch, err := git.GetCurrentBranch(target)
-		if err != nil {
-			branch = "unknown"
-		}
-
-		log("  %s:\n", color.MagentaString(name))
-		log("    Branch: %s\n", color.GreenString(branch))
-		log("    Path:   %s\n", color.BlueString(target))
-		log("    Procs:  %v\n", svc.Procs)
+		log("    %s: %v\n", color.MagentaString(name), svc.Procs)
 	}
 
 	return nil
