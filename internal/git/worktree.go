@@ -63,7 +63,10 @@ func ListWorktreesInDir(dir string) ([]Worktree, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
+	return parseWorktreeList(out)
+}
 
+func parseWorktreeList(out []byte) ([]Worktree, error) {
 	var worktrees []Worktree
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {

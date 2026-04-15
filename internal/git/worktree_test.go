@@ -7,6 +7,31 @@ import (
 	"testing"
 )
 
+// initTestRepo creates a temporary git repo with an initial commit and returns its path.
+func initTestRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := exec.Command("git", "init", dir).Run(); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	git("config", "user.email", "test@test.com")
+	git("config", "user.name", "Test")
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("test"), 0o644)
+	git("add", ".")
+	git("commit", "-m", "initial")
+
+	return dir
+}
+
 func TestParseWorktreeLine(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -14,28 +39,24 @@ func TestParseWorktreeLine(t *testing.T) {
 		expected Worktree
 	}{
 		{
-			name: "normal worktree",
-			line: "/home/user/project  abc1234 [main]",
-			expected: Worktree{
-				Path:   "/home/user/project",
-				Branch: "main",
-			},
+			name:     "normal worktree",
+			line:     "/home/user/project  abc1234 [main]",
+			expected: Worktree{Path: "/home/user/project", Branch: "main"},
 		},
 		{
-			name: "feature branch",
-			line: "/home/user/project-feature  def5678 [feature/new-thing]",
-			expected: Worktree{
-				Path:   "/home/user/project-feature",
-				Branch: "feature/new-thing",
-			},
+			name:     "feature branch",
+			line:     "/home/user/project-feature  def5678 [feature/new-thing]",
+			expected: Worktree{Path: "/home/user/project-feature", Branch: "feature/new-thing"},
 		},
 		{
-			name: "bare repository",
-			line: "/home/user/project.git  (bare)",
-			expected: Worktree{
-				Path: "/home/user/project.git",
-				Bare: true,
-			},
+			name:     "bare repository",
+			line:     "/home/user/project.git  (bare)",
+			expected: Worktree{Path: "/home/user/project.git", Bare: true},
+		},
+		{
+			name:     "empty line",
+			line:     "",
+			expected: Worktree{},
 		},
 	}
 
@@ -55,155 +76,136 @@ func TestParseWorktreeLine(t *testing.T) {
 	}
 }
 
+func TestParseWorktreeList(t *testing.T) {
+	input := []byte("/repo/.bare  (bare)\n/repo/main  abc1234 [main]\n/repo/feature  def5678 [feature/x]\n\n")
+
+	worktrees, err := parseWorktreeList(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(worktrees) != 3 {
+		t.Fatalf("expected 3 worktrees, got %d", len(worktrees))
+	}
+	if w := worktrees[0]; !w.Bare || w.Path != "/repo/.bare" {
+		t.Errorf("worktree[0]: expected bare at /repo/.bare, got %+v", w)
+	}
+	if w := worktrees[1]; w.Branch != "main" || w.Path != "/repo/main" {
+		t.Errorf("worktree[1]: expected main at /repo/main, got %+v", w)
+	}
+	if w := worktrees[2]; w.Branch != "feature/x" || w.Path != "/repo/feature" {
+		t.Errorf("worktree[2]: expected feature/x at /repo/feature, got %+v", w)
+	}
+}
+
 func TestValidateWorktreePath(t *testing.T) {
-	// Test with non-existent path
 	if err := ValidateWorktreePath("/nonexistent/path"); err == nil {
 		t.Error("expected error for nonexistent path")
 	}
 
-	// Test with regular file
-	tmpFile, _ := os.CreateTemp("", "test")
-	tmpFile.Close()
-	defer os.Remove(tmpFile.Name())
-
-	if err := ValidateWorktreePath(tmpFile.Name()); err == nil {
+	file := filepath.Join(t.TempDir(), "file")
+	os.WriteFile(file, []byte("test"), 0o644)
+	if err := ValidateWorktreePath(file); err == nil {
 		t.Error("expected error for regular file")
 	}
 
-	// Test with directory that's not a git repo
-	tmpDir, _ := os.MkdirTemp("", "test")
-	defer os.RemoveAll(tmpDir)
-
-	if err := ValidateWorktreePath(tmpDir); err == nil {
+	if err := ValidateWorktreePath(t.TempDir()); err == nil {
 		t.Error("expected error for non-git directory")
 	}
 }
 
 func TestGetCurrentBranch(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "git-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	dir := initTestRepo(t)
 
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Skipf("git not available: %v", err)
-	}
-
-	exec.Command("git", "-C", tmpDir, "config", "user.email", "test@test.com").Run()
-	exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
-
-	testFile := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(testFile, []byte("test"), 0o644)
-	exec.Command("git", "-C", tmpDir, "add", ".").Run()
-	exec.Command("git", "-C", tmpDir, "commit", "-m", "initial").Run()
-
-	branch, err := GetCurrentBranch(tmpDir)
+	branch, err := GetCurrentBranch(dir)
 	if err != nil {
 		t.Fatalf("GetCurrentBranch failed: %v", err)
 	}
-
 	if branch != "master" && branch != "main" {
 		t.Errorf("expected 'master' or 'main', got %q", branch)
 	}
 }
 
 func TestListWorktreesInDir(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "git-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	dir := initTestRepo(t)
 
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Skipf("git not available: %v", err)
-	}
-
-	exec.Command("git", "-C", tmpDir, "config", "user.email", "test@test.com").Run()
-	exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
-
-	testFile := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(testFile, []byte("test"), 0o644)
-	exec.Command("git", "-C", tmpDir, "add", ".").Run()
-	exec.Command("git", "-C", tmpDir, "commit", "-m", "initial").Run()
-
-	// Test ListWorktreesInDir from a different directory
-	worktrees, err := ListWorktreesInDir(tmpDir)
+	worktrees, err := ListWorktreesInDir(dir)
 	if err != nil {
 		t.Fatalf("ListWorktreesInDir failed: %v", err)
 	}
-
 	if len(worktrees) == 0 {
-		t.Error("expected at least one worktree")
+		t.Fatal("expected at least one worktree")
 	}
 
-	// The main worktree should be listed
 	found := false
 	for _, wt := range worktrees {
-		if wt.Path == tmpDir {
+		if wt.Path == dir {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected to find worktree at %s", tmpDir)
+		t.Errorf("expected to find worktree at %s", dir)
+	}
+}
+
+func TestListWorktreesInDir_WithWorktree(t *testing.T) {
+	dir := initTestRepo(t)
+	mainBranch, _ := GetCurrentBranch(dir)
+
+	featureDir := filepath.Join(t.TempDir(), "feature")
+	cmd := exec.Command("git", "-C", dir, "worktree", "add", featureDir, "-b", "feature-branch")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+
+	// Both directories should return the same worktree list
+	for _, searchDir := range []string{dir, featureDir} {
+		worktrees, err := ListWorktreesInDir(searchDir)
+		if err != nil {
+			t.Fatalf("ListWorktreesInDir(%s): %v", searchDir, err)
+		}
+		if len(worktrees) != 2 {
+			t.Fatalf("from %s: expected 2 worktrees, got %d", searchDir, len(worktrees))
+		}
+		branches := map[string]bool{}
+		for _, wt := range worktrees {
+			branches[wt.Branch] = true
+		}
+		if !branches[mainBranch] || !branches["feature-branch"] {
+			t.Errorf("from %s: expected branches %q and %q, got %v", searchDir, mainBranch, "feature-branch", branches)
+		}
+	}
+}
+
+func TestListWorktreesInDir_NotGitRepo(t *testing.T) {
+	if _, err := ListWorktreesInDir(t.TempDir()); err == nil {
+		t.Error("expected error for non-git directory")
 	}
 }
 
 func TestGetWorktreePathInDir(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "git-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	dir := initTestRepo(t)
+	branch, _ := GetCurrentBranch(dir)
 
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Skipf("git not available: %v", err)
-	}
-
-	exec.Command("git", "-C", tmpDir, "config", "user.email", "test@test.com").Run()
-	exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
-
-	testFile := filepath.Join(tmpDir, "test.txt")
-	os.WriteFile(testFile, []byte("test"), 0o644)
-	exec.Command("git", "-C", tmpDir, "add", ".").Run()
-	exec.Command("git", "-C", tmpDir, "commit", "-m", "initial").Run()
-
-	// Get the branch name (could be main or master)
-	branch, _ := GetCurrentBranch(tmpDir)
-
-	// Test GetWorktreePathInDir
-	path, err := GetWorktreePathInDir(tmpDir, branch)
+	path, err := GetWorktreePathInDir(dir, branch)
 	if err != nil {
 		t.Fatalf("GetWorktreePathInDir failed: %v", err)
 	}
 
-	expectedPath, _ := filepath.EvalSymlinks(tmpDir)
+	expectedPath, _ := filepath.EvalSymlinks(dir)
 	gotPath, _ := filepath.EvalSymlinks(path)
-
 	if gotPath != expectedPath {
 		t.Errorf("expected %q, got %q", expectedPath, gotPath)
 	}
 
-	// Test with non-existent branch
-	_, err = GetWorktreePathInDir(tmpDir, "nonexistent-branch")
-	if err == nil {
+	if _, err := GetWorktreePathInDir(dir, "nonexistent-branch"); err == nil {
 		t.Error("expected error for nonexistent branch")
 	}
 }
 
 func TestRepoRoot(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "git-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Skipf("git not available: %v", err)
-	}
-
-	subDir := filepath.Join(tmpDir, "sub", "dir")
+	dir := initTestRepo(t)
+	subDir := filepath.Join(dir, "sub", "dir")
 	os.MkdirAll(subDir, 0o755)
 
 	origDir, _ := os.Getwd()
@@ -215,9 +217,8 @@ func TestRepoRoot(t *testing.T) {
 		t.Fatalf("RepoRoot failed: %v", err)
 	}
 
-	expectedRoot, _ := filepath.EvalSymlinks(tmpDir)
+	expectedRoot, _ := filepath.EvalSymlinks(dir)
 	gotRoot, _ := filepath.EvalSymlinks(root)
-
 	if gotRoot != expectedRoot {
 		t.Errorf("expected %q, got %q", expectedRoot, gotRoot)
 	}
