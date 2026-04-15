@@ -74,11 +74,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		switched[svc.Dir] = true
 
 		linkPath := filepath.Join(cfg.Root, svc.Dir)
-		_, currentTarget, _ := symlink.Verify(linkPath)
+		valid, currentTarget, _ := symlink.Verify(linkPath)
 
 		// Use resolved symlink target for worktree discovery, fall back to parent dir
 		searchDir := filepath.Dir(linkPath)
-		if currentTarget != "" {
+		if valid && currentTarget != "" {
 			searchDir = currentTarget
 		}
 
