@@ -117,17 +117,59 @@ detect = "nuxt.config.ts"
 
 ### Config Options
 
-| Option   | Description                                                       |
-| -------- | ----------------------------------------------------------------- |
-| `dir`    | Symlink path, relative to the config file's directory             |
-| `procs`  | Overmind process names to restart (from your Procfile)            |
-| `detect` | File to look for when auto-detecting service (optional)           |
-| `root`   | Override the root directory (defaults to config file's directory) |
+| Option       | Description                                                               |
+| ------------ | ------------------------------------------------------------------------- |
+| `dir`        | Symlink path, relative to the config file's directory                     |
+| `procs`      | Overmind process names to restart (from your Procfile)                    |
+| `detect`     | File to look for when auto-detecting service (optional)                   |
+| `port`       | TCP port for HTTP readiness probing after restart (optional)              |
+| `depends_on` | Services this one must wait for during a multi-service restart (optional) |
+| `root`       | Override the root directory (defaults to config file's directory)         |
 
 ### Environment Variables
 
 - `OMR_ROOT` - Override the root directory
 - `OMR_CONFIG` - Set config file path
+
+### Readiness probing
+
+When `port` is set, OMR waits for the restarted service's HTTP layer to respond
+before moving on. The probe is generic — TCP-connect to `localhost:<port>` (tries
+both IPv4 and IPv6 so dev servers that bind only `::1`, like Nuxt by default,
+work without extra config), then HTTP `HEAD /`. Any HTTP response (200, 404, 405, …)
+counts as ready, so no `/health` endpoint is required.
+
+```toml
+[services.api]
+port = 9002
+```
+
+OMR polls until any HTTP response comes back. There's a small theoretical
+window where a dying old process could respond before overmind kills it, but
+in interactive dev use the worst case is a one-refresh 502 — far better than
+the polling-race hangs a "wait for the port to drop" gate introduces.
+
+### Sequencing
+
+When multiple services restart in one invocation, `depends_on` orders them into
+waves. OMR waits for each wave's `port` probes to succeed before starting the
+next — this fixes the common 502 race where a fast frontend boots before a slow
+backend and serves a request before the backend can answer.
+
+```toml
+[services.api]
+dir = "current"
+port = 9002
+
+[services.web]
+dir = "current"
+port = 3002
+depends_on = ["api"]
+```
+
+`depends_on` is only honored among services *being restarted in this invocation*.
+If `api` isn't being restarted, `web` assumes it's already up and starts
+immediately.
 
 ## How It Works
 

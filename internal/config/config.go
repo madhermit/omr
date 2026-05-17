@@ -11,9 +11,11 @@ import (
 
 // Service represents a configured service
 type Service struct {
-	Dir    string   `mapstructure:"dir"`
-	Procs  []string `mapstructure:"procs"`
-	Detect string   `mapstructure:"detect"`
+	Dir       string   `mapstructure:"dir"`
+	Procs     []string `mapstructure:"procs"`
+	Detect    string   `mapstructure:"detect"`
+	Port      int      `mapstructure:"port"`
+	DependsOn []string `mapstructure:"depends_on"`
 }
 
 // Config represents the application configuration
@@ -156,6 +158,53 @@ func (c *Config) ValidateRoot() error {
 		if svc.Dir == "" {
 			return fmt.Errorf("service %q is missing required 'dir' field", name)
 		}
+		if svc.Port < 0 || svc.Port > 65535 {
+			return fmt.Errorf("service %q has invalid port %d (must be 1-65535, or 0 for unset)", name, svc.Port)
+		}
+	}
+	return c.validateDeps()
+}
+
+// validateDeps checks that depends_on references known services and contains no cycles.
+// Uses Kahn's algorithm — any node with non-zero in-degree at the end is in a cycle.
+func (c *Config) validateDeps() error {
+	inDegree := map[string]int{}
+	for name := range c.Services {
+		inDegree[name] = 0
+	}
+	for name, svc := range c.Services {
+		for _, dep := range svc.DependsOn {
+			if _, ok := c.Services[dep]; !ok {
+				return fmt.Errorf("service %q depends on unknown service %q", name, dep)
+			}
+			inDegree[name]++
+		}
+	}
+
+	queue := []string{}
+	for name, deg := range inDegree {
+		if deg == 0 {
+			queue = append(queue, name)
+		}
+	}
+	visited := 0
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		visited++
+		for other, svc := range c.Services {
+			for _, dep := range svc.DependsOn {
+				if dep == name {
+					inDegree[other]--
+					if inDegree[other] == 0 {
+						queue = append(queue, other)
+					}
+				}
+			}
+		}
+	}
+	if visited != len(c.Services) {
+		return fmt.Errorf("depends_on cycle detected among services")
 	}
 	return nil
 }

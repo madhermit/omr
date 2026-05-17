@@ -2,16 +2,17 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/madhermit/omr/internal/git"
-	"github.com/madhermit/omr/internal/overmind"
-	"github.com/madhermit/omr/internal/symlink"
+	"github.com/madhermit/omr/internal/plan"
 	"github.com/spf13/cobra"
 )
 
 var switchAll bool
+
+const defaultWaveTimeout = 60 * time.Second
 
 var switchCmd = &cobra.Command{
 	Use:   "switch [branch]",
@@ -21,6 +22,10 @@ var switchCmd = &cobra.Command{
 If no branch is specified, uses the current worktree.
 If --all is specified, switches all services; otherwise switches only the
 auto-detected service.
+
+When path/port/depends_on are configured, restart is change-driven (only
+services whose source actually changed restart) and sequenced (waits for
+dependencies to be ready before starting dependents).
 
 Examples:
   omr switch             # Switch detected service to current worktree
@@ -46,78 +51,64 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Determine branch
-	var branch string
-	if len(args) == 0 {
-		worktreePath, err := git.RepoRoot()
-		if err != nil {
-			return fmt.Errorf("determining current worktree: %w", err)
-		}
-		branch, err = git.GetCurrentBranch(worktreePath)
-		if err != nil {
-			return fmt.Errorf("determining current branch: %w", err)
-		}
-	} else {
-		branch = args[0]
+	branch, err := resolveBranch(args)
+	if err != nil {
+		return err
 	}
 
-	// Deduplicate dirs — multiple services may share one symlink
-	switched := map[string]bool{}
-	var allProcs []string
-	anyChanged := false
-
-	for _, svcName := range services {
-		svc := cfg.Services[svcName]
-		if switched[svc.Dir] {
-			continue
-		}
-		switched[svc.Dir] = true
-
-		linkPath := filepath.Join(cfg.Root, svc.Dir)
-		valid, currentTarget, _ := symlink.Verify(linkPath)
-
-		// Use resolved symlink target for worktree discovery, fall back to parent dir
-		searchDir := filepath.Dir(linkPath)
-		if valid && currentTarget != "" {
-			searchDir = currentTarget
-		}
-
-		worktreePath, err := git.GetWorktreePathInDir(searchDir, branch)
-		if err != nil {
-			return fmt.Errorf("finding worktree for %s branch '%s': %w", svcName, branch, err)
-		}
-
-		if currentTarget == worktreePath {
-			log("  %s: already on %s\n", color.MagentaString(svc.Dir), color.CyanString(branch))
-			continue
-		}
-
-		log("Switching %s → %s\n", color.MagentaString(svc.Dir), color.CyanString(branch))
-		log("  Path: %s\n", color.BlueString(worktreePath))
-
-		if err := symlink.Create(cfg.Root, svc.Dir, worktreePath); err != nil {
-			return fmt.Errorf("creating symlink for %s: %w", svc.Dir, err)
-		}
-
-		// Restart all services sharing this dir, not just the detected one
-		allProcs = append(allProcs, cfg.ProcsForDir(svc.Dir)...)
-		anyChanged = true
+	p, err := plan.Build(cfg, services, plan.BuildResolver(cfg, branch))
+	if err != nil {
+		return err
 	}
 
-	if !anyChanged {
+	shown := map[string]bool{}
+	for _, flip := range p.DirFlips {
+		shown[flip.Dir] = true
+		log("Switching %s → %s\n", color.MagentaString(flip.Dir), color.CyanString(branch))
+		log("  Path: %s\n", color.BlueString(flip.NewTarget))
+	}
+	for _, name := range services {
+		dir := cfg.Services[name].Dir
+		if shown[dir] {
+			continue
+		}
+		shown[dir] = true
+		log("  %s: already on %s\n", color.MagentaString(dir), color.CyanString(branch))
+	}
+
+	if p.IsEmpty() {
 		logln(color.GreenString("Already on"), color.CyanString(branch))
 		return nil
 	}
 
-	if !overmind.IsRunning(cfg.Root) {
-		warn("Overmind is not running. Start it with: overmind start")
+	if !p.AnyRestarts() && len(p.DirFlips) > 0 {
+		log("\nSymlinks flipped; no service source changed — skipping restart.\n")
 		return nil
 	}
-	if len(allProcs) > 0 {
-		log("\nRestarting overmind processes: %v\n", allProcs)
-		if err := overmind.Restart(cfg.Root, allProcs...); err != nil {
-			return fmt.Errorf("restarting overmind: %w", err)
-		}
+
+	return plan.Execute(cmd.Context(), cfg, p, defaultWaveTimeout, planLogger())
+}
+
+func resolveBranch(args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
 	}
-	return nil
+	worktreePath, err := git.RepoRoot()
+	if err != nil {
+		return "", fmt.Errorf("determining current worktree: %w", err)
+	}
+	branch, err := git.GetCurrentBranch(worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("determining current branch: %w", err)
+	}
+	return branch, nil
+}
+
+func planLogger() plan.Logger {
+	return plan.Logger{
+		Logf: func(format string, args ...interface{}) {
+			log(format, args...)
+		},
+		Warnf: warn,
+	}
 }

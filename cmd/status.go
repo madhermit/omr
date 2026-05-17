@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/fatih/color"
@@ -69,7 +70,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			log("  %s: %s (%s)\n", color.MagentaString(svc.Dir), color.GreenString(branch), color.BlueString(target))
 		}
 
-		log("    %s: %v\n", color.MagentaString(name), svc.Procs)
+		details := ""
+		if svc.Port != 0 {
+			details += fmt.Sprintf(" port=%d", svc.Port)
+		}
+		if len(svc.DependsOn) > 0 {
+			details += fmt.Sprintf(" deps=%v", svc.DependsOn)
+		}
+		log("    %s: %v%s\n", color.MagentaString(name), svc.Procs, color.HiBlackString(details))
 	}
 
 	return nil

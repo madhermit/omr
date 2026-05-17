@@ -126,6 +126,141 @@ procs = ["app"]
 	}
 }
 
+func TestValidateRoot_Port(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "config-test")
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"api": {Dir: "api", Port: 70000},
+		},
+	}
+	if err := cfg.ValidateRoot(); err == nil {
+		t.Error("expected error for out-of-range port")
+	}
+
+	cfg.Services["api"] = Service{Dir: "api", Port: 0}
+	if err := cfg.ValidateRoot(); err != nil {
+		t.Errorf("port=0 should be allowed (unset sentinel), got: %v", err)
+	}
+
+	cfg.Services["api"] = Service{Dir: "api", Port: 3000}
+	if err := cfg.ValidateRoot(); err != nil {
+		t.Errorf("valid port should pass, got: %v", err)
+	}
+}
+
+func TestValidateRoot_DependsOn(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "config-test")
+	defer os.RemoveAll(tmpDir)
+
+	// Unknown dep
+	cfg := &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"web": {Dir: "web", DependsOn: []string{"api"}},
+		},
+	}
+	if err := cfg.ValidateRoot(); err == nil {
+		t.Error("expected error for unknown depends_on target")
+	}
+
+	// Valid linear chain
+	cfg = &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"api": {Dir: "api"},
+			"web": {Dir: "web", DependsOn: []string{"api"}},
+		},
+	}
+	if err := cfg.ValidateRoot(); err != nil {
+		t.Errorf("valid chain should pass, got: %v", err)
+	}
+
+	// Two-node cycle
+	cfg = &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"a": {Dir: "a", DependsOn: []string{"b"}},
+			"b": {Dir: "b", DependsOn: []string{"a"}},
+		},
+	}
+	if err := cfg.ValidateRoot(); err == nil {
+		t.Error("expected error for two-node cycle")
+	}
+
+	// Three-node cycle
+	cfg = &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"a": {Dir: "a", DependsOn: []string{"b"}},
+			"b": {Dir: "b", DependsOn: []string{"c"}},
+			"c": {Dir: "c", DependsOn: []string{"a"}},
+		},
+	}
+	if err := cfg.ValidateRoot(); err == nil {
+		t.Error("expected error for three-node cycle")
+	}
+
+	// Self-loop
+	cfg = &Config{
+		Root: tmpDir,
+		Services: map[string]Service{
+			"a": {Dir: "a", DependsOn: []string{"a"}},
+		},
+	}
+	if err := cfg.ValidateRoot(); err == nil {
+		t.Error("expected error for self-loop")
+	}
+}
+
+func TestLoadNewFields(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configContent := `
+root = "/tmp/test-root"
+
+[services.api]
+dir = "current"
+procs = ["api"]
+port = 9002
+
+[services.web]
+dir = "current"
+procs = ["web"]
+port = 3002
+depends_on = ["api"]
+`
+	configPath := filepath.Join(tmpDir, ".omr.toml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	api := cfg.Services["api"]
+	if api.Port != 9002 {
+		t.Errorf("api.Port: expected 9002, got %d", api.Port)
+	}
+
+	web := cfg.Services["web"]
+	if len(web.DependsOn) != 1 || web.DependsOn[0] != "api" {
+		t.Errorf("web.DependsOn: expected [api], got %v", web.DependsOn)
+	}
+}
+
 func TestSetConfigFile(t *testing.T) {
 	// Reset state
 	configFile = ""

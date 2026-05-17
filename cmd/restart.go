@@ -7,6 +7,7 @@ import (
 
 	"github.com/madhermit/omr/internal/config"
 	"github.com/madhermit/omr/internal/overmind"
+	"github.com/madhermit/omr/internal/plan"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +19,9 @@ var restartCmd = &cobra.Command{
 	Long: `Restart overmind processes for one or more services.
 
 This does NOT change symlinks - use 'omr switch' for that.
+
+When depends_on / port are configured, restarts are sequenced into waves and
+omr waits for each wave's services to become ready before starting the next.
 
 If no services are specified, omr will auto-detect the service based on
 the current directory (looking for detect files like nuxt.config.ts or
@@ -49,27 +53,20 @@ func runRestart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Collect all procs to restart
-	var allProcs []string
-	for _, svcName := range services {
-		svc := cfg.Services[svcName]
-		allProcs = append(allProcs, svc.Procs...)
-	}
-
 	if !overmind.IsRunning(cfg.Root) {
 		return fmt.Errorf("overmind is not running; start it with: overmind start")
 	}
 
-	if len(allProcs) == 0 {
+	// Build a flip-free plan: only wave ordering matters here. All requested
+	// services are considered "included" since the user asked to restart them.
+	waves := plan.BuildWaves(cfg, services)
+	if len(waves) == 0 {
 		return fmt.Errorf("no processes configured for services: %v", services)
 	}
+	p := plan.Plan{Waves: waves}
 
-	log("Restarting processes: %v\n", allProcs)
-	if err := overmind.Restart(cfg.Root, allProcs...); err != nil {
-		return fmt.Errorf("restarting overmind: %w", err)
-	}
-
-	return nil
+	log("Restarting: %v\n", services)
+	return plan.Execute(cmd.Context(), cfg, p, defaultWaveTimeout, planLogger())
 }
 
 // resolveServices determines which services to operate on.
